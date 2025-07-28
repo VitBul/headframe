@@ -1,41 +1,55 @@
 import json
-import sys
 
-# Чтение params из stdin (Salebot передаёт их как аргумент)
-if len(sys.argv) > 1:
-    params_str = sys.argv[1]
-    params = json.loads(params_str)
-else:
-    params = {}
+def handle(data):
+    try:
+        # Парсим входные params (data — строка JSON)
+        params = json.loads(data)
+        api_response = params.get('api_response', '[]')  # API-ответ как строка
+        th_s = float(params.get('th_s', 0))  # th_s как float, default 0
 
-# Получение переменных из params (они приходят как JSON)
-th_s = float(params.get('th_s', 0))
-emcd = float(params.get('emcd', 0))
-viabtc = float(params.get('viabtc', 0))
-trustpool = float(params.get('trustpool', 0))
-headframe = float(params.get('headframe', 0))
+        # Парсим API-ответ в список dict
+        rates_data = json.loads(api_response)
 
-# Расчёт calc-значений
-emcd_calc = th_s * 30 * emcd / 100000000
-viabtc_calc = th_s * 30 * viabtc / 100000000
-trustpool_calc = th_s * 30 * trustpool / 100000000
-headframe_calc = th_s * 30 * headframe / 100000000
+        # Создаём словарь source -> rate (float, или 0 если ошибка)
+        rates = {}
+        for item in rates_data:
+            source = item.get('source', '').lower()  # lowercase для consistency
+            try:
+                rate = float(item.get('rate', 0))
+            except ValueError:
+                rate = 0.0
+            rates[source] = rate
 
-# Список для сортировки
-rates = [
-    {'source': 'EMCD', 'rate': emcd_calc},
-    {'source': 'ViaBTC', 'rate': viabtc_calc},
-    {'source': 'Trustpool', 'rate': trustpool_calc},
-    {'source': 'Headframe', 'rate': headframe_calc}
-]
+        # Извлекаем конкретные rates (default 0 если не найдены)
+        emcd = rates.get('emcd', 0.0)
+        viabtc = rates.get('viabtc', 0.0)
+        trustpool = rates.get('trustpool', 0.0)
+        headframe = rates.get('headframe', 0.0)
 
-# Сортировка по rate в порядке убывания
-sorted_rates = sorted(rates, key=lambda x: x['rate'], reverse=True)
+        # Рассчитываем calc-значения
+        def calc(rate):
+            return (th_s * 30 * rate) / 100000000
 
-# Формирование текста
-text = ''
-for item in sorted_rates:
-    text += f"{item['source']} – {round(item['rate'], 6)} BTC\n"
+        calculations = [
+            ('EMCD', calc(emcd)),
+            ('ViaBTC', calc(viabtc)),
+            ('Trustpool', calc(trustpool)),
+            ('Headframe', calc(headframe))
+        ]
 
-# Возврат результата (Salebot сохранит в r)
-print(text)
+        # Сортируем по calc descending (убывание)
+        sorted_calcs = sorted(calculations, key=lambda x: x[1], reverse=True)
+
+        # Формируем текст с rounding до 6 знаков
+        text_lines = []
+        for source, value in sorted_calcs:
+            rounded_value = round(value, 6)
+            text_lines.append(f"{source} – {rounded_value} BTC")
+
+        text = "\n".join(text_lines)
+
+        # Возвращаем JSON для Salebot
+        return json.dumps({"text": text, "success": True})
+    except Exception as e:
+        # Обработка ошибок (возврат для debugging)
+        return json.dumps({"text": "", "success": False, "error": str(e)})
