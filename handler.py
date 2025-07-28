@@ -4,27 +4,21 @@ def handle(data):
     try:
         # Парсим входные params (data — строка JSON)
         params = json.loads(data)
-        api_response = params.get('api_response', '[]')  # API-ответ как строка
-        th_s = float(params.get('th_s', 0))  # th_s как float, default 0
 
-        # Парсим API-ответ в список dict
-        rates_data = json.loads(api_response)
+        # Извлекаем th_s как float (default 0)
+        th_s = float(params.get('th_s', 0))
 
-        # Создаём словарь source -> rate (float, или 0 если ошибка)
-        rates = {}
-        for item in rates_data:
-            source = item.get('source', '').lower()  # lowercase для consistency
+        # Извлекаем rate как float (default 0 если не число или отсутствует)
+        def get_rate(key):
             try:
-                rate = float(item.get('rate', 0))
+                return float(params.get(key, '0'))
             except ValueError:
-                rate = 0.0
-            rates[source] = rate
+                return 0.0
 
-        # Извлекаем конкретные rates (default 0 если не найдены)
-        emcd = rates.get('emcd', 0.0)
-        viabtc = rates.get('viabtc', 0.0)
-        trustpool = rates.get('trustpool', 0.0)
-        headframe = rates.get('headframe', 0.0)
+        emcd = get_rate('emcd')
+        viabtc = get_rate('viabtc')
+        trustpool = get_rate('trustpool')
+        headframe = get_rate('headframe')
 
         # Рассчитываем calc-значения
         def calc(rate):
@@ -51,5 +45,5 @@ def handle(data):
         # Возвращаем JSON для Salebot
         return json.dumps({"text": text, "success": True})
     except Exception as e:
-        # Обработка ошибок (возврат для debugging)
+        # Обработка ошибок
         return json.dumps({"text": "", "success": False, "error": str(e)})
